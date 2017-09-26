@@ -62,6 +62,7 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
     private static final int CORRECT_ANSWER_DELAY_MILLIS = 1000;
     private static final String REMAINING_SONGS_KEY = "remaining_songs";
     private static final String TAG = QuizActivity.class.getSimpleName();
+    private static MediaSessionCompat mMediaSession;
     private int[] mButtonIDs = {R.id.buttonA, R.id.buttonB, R.id.buttonC, R.id.buttonD};
     private ArrayList<Integer> mRemainingSampleIDs;
     private ArrayList<Integer> mQuestionSampleIDs;
@@ -71,10 +72,8 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
     private Button[] mButtons;
     private SimpleExoPlayer mExoPlayer;
     private SimpleExoPlayerView mPlayerView;
-    private static MediaSessionCompat mMediaSession;
     private PlaybackStateCompat.Builder mStateBuilder;
     private NotificationManager mNotificationManager;
-
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -84,7 +83,6 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
 
         // Initialize the player view.
         mPlayerView = (SimpleExoPlayerView) findViewById(R.id.playerView);
-
 
         boolean isNewGame = !getIntent().hasExtra(REMAINING_SONGS_KEY);
 
@@ -104,6 +102,7 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
         // Generate a question and get the correct answer.
         mQuestionSampleIDs = QuizUtils.generateQuestion(mRemainingSampleIDs);
         mAnswerSampleID = QuizUtils.getCorrectAnswerID(mQuestionSampleIDs);
+
 
         // Load the question mark as the background image until the user answers the question.
         mPlayerView.setDefaultArtwork(BitmapFactory.decodeResource
@@ -169,6 +168,7 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
 
     }
 
+
     /**
      * Initializes the button to the correct views, and sets the text to the composers names,
      * and set's the OnClick listener to the buttons.
@@ -194,6 +194,7 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
     /**
      * Shows Media Style notification, with actions that depend on the current MediaSession
      * PlaybackState.
+     *
      * @param state The PlaybackState of the MediaSession.
      */
     private void showNotification(PlaybackStateCompat state) {
@@ -201,7 +202,7 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
 
         int icon;
         String play_pause;
-        if(state.getState() == PlaybackStateCompat.STATE_PLAYING){
+        if (state.getState() == PlaybackStateCompat.STATE_PLAYING) {
             icon = R.drawable.exo_controls_pause;
             play_pause = getString(R.string.pause);
         } else {
@@ -232,12 +233,13 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
                 .addAction(playPauseAction)
                 .setStyle(new NotificationCompat.MediaStyle()
                         .setMediaSession(mMediaSession.getSessionToken())
-                        .setShowActionsInCompactView(0,1));
+                        .setShowActionsInCompactView(0, 1));
 
 
         mNotificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         mNotificationManager.notify(0, builder.build());
     }
+
 
 
     /**
@@ -254,7 +256,7 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
 
             // Set the ExoPlayer.EventListener to this activity.
             mExoPlayer.addListener(this);
-            
+
             // Prepare the MediaSource.
             String userAgent = Util.getUserAgent(this, "ClassicalMusicQuiz");
             MediaSource mediaSource = new ExtractorMediaSource(mediaUri, new DefaultDataSourceFactory(
@@ -263,7 +265,6 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
             mExoPlayer.setPlayWhenReady(true);
         }
     }
-
 
     /**
      * Release ExoPlayer.
@@ -328,9 +329,11 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
                 startActivity(nextQuestionIntent);
             }
         }, CORRECT_ANSWER_DELAY_MILLIS);
+
     }
 
     /**
+     * Disables the buttons and changes the background colors to show the correct answer.
      * Disables the buttons and changes the background colors and player art to
      * show the correct answer.
      */
@@ -355,7 +358,6 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
-
     /**
      * Release the player when the activity is destroyed.
      */
@@ -366,7 +368,6 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
         mMediaSession.setActive(false);
     }
 
-    
     // ExoPlayer Event Listeners
 
     @Override
@@ -383,21 +384,25 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
 
     /**
      * Method that is called when the ExoPlayer state changes. Used to update the MediaSession
+     * PlayBackState to keep in sync.
      * PlayBackState to keep in sync, and post the media notification.
      * @param playWhenReady true if ExoPlayer is playing, false if it's paused.
      * @param playbackState int describing the state of ExoPlayer. Can be STATE_READY, STATE_IDLE,
      *                      STATE_BUFFERING, or STATE_ENDED.
      */
+
     @Override
     public void onPlayerStateChanged(boolean playWhenReady, int playbackState) {
-        if((playbackState == ExoPlayer.STATE_READY) && playWhenReady){
+        if ((playbackState == ExoPlayer.STATE_READY) && playWhenReady) {
             mStateBuilder.setState(PlaybackStateCompat.STATE_PLAYING,
                     mExoPlayer.getCurrentPosition(), 1f);
-        } else if((playbackState == ExoPlayer.STATE_READY)){
+        } else if ((playbackState == ExoPlayer.STATE_READY)) {
             mStateBuilder.setState(PlaybackStateCompat.STATE_PAUSED,
                     mExoPlayer.getCurrentPosition(), 1f);
         }
         mMediaSession.setPlaybackState(mStateBuilder.build());
+
+
         showNotification(mStateBuilder.build());
     }
 
@@ -407,6 +412,20 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
 
     @Override
     public void onPositionDiscontinuity() {
+    }
+
+    /**
+     * Broadcast Receiver registered to receive the MEDIA_BUTTON intent coming from clients.
+     */
+    public static class MediaReceiver extends BroadcastReceiver {
+
+        public MediaReceiver() {
+        }
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            MediaButtonReceiver.handleIntent(mMediaSession, intent);
+        }
     }
 
     /**
@@ -426,20 +445,6 @@ public class QuizActivity extends AppCompatActivity implements View.OnClickListe
         @Override
         public void onSkipToPrevious() {
             mExoPlayer.seekTo(0);
-        }
-    }
-
-    /**
-     * Broadcast Receiver registered to receive the MEDIA_BUTTON intent coming from clients.
-     */
-    public static class MediaReceiver extends BroadcastReceiver {
-
-        public MediaReceiver() {
-        }
-
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            MediaButtonReceiver.handleIntent(mMediaSession, intent);
         }
     }
 }
